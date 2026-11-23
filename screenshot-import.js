@@ -281,9 +281,23 @@ $("scan-result").onchange=e=>{
   if(field==="name"){r.name=e.target.value.trim();r.id=lookup.get(r.name)?.id||""}
   if(field==="limit")r.limit=e.target.value===""?null:Number(e.target.value);
   if(field==="level"){const n=Number(e.target.value);r.level=e.target.value!==""&&Number.isInteger(n)&&n>0&&n<=60?n:null}
-  if(field==="confirmed")r.confirmed=e.target.checked;
-  else{r.confirmed=false}
-  render();
+  if(field==="confirmed"){r.confirmed=e.target.checked;render();return}
+  // Do not rebuild a focused card on mobile: blur occurs before the next tap.
+  r.confirmed=false;
+  const checked=item.querySelector('[data-field="confirmed"]');
+  if(checked)checked.checked=false;
+  item.classList.remove("scan-invalid");
+  item.querySelector(".scan-problem")?.remove();
+  if(field==="name"){
+    const target=item.querySelector(".scan-thumb:nth-child(2)");
+    if(target){
+      const src=cardImage(r.id);
+      target.innerHTML=(src
+        ?'<img src="'+esc(src)+'" data-zoom="'+esc(src)+'" data-zoom-label="資料庫卡圖：'+esc(r.name)+'" alt="資料庫參考卡圖" loading="lazy">'
+        :'<div class="scan-missing">無參考圖片</div>')+'<span>資料庫對照</span>';
+    }
+  }
+  updateSummary();
 };
 $("scan-result").onclick=e=>{
   const image=e.target.closest("[data-zoom]");
