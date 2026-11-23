@@ -3,6 +3,8 @@
 "use strict";
 const style=document.createElement("style");
 style.textContent='#scan-panel{margin:16px 0;padding:16px;background:#1c2230;border:1px solid #374358;border-radius:14px}#scan-panel[hidden],#scan-finish[hidden]{display:none}#scan-panel h2{font-size:19px;margin:0 0 9px}.scan-line{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin:10px 0}.scan-line label{min-width:0;display:flex;flex-direction:column;gap:4px;color:#b9c9da;font-size:12px}.scan-line input[type=file]{max-width:100%}.scan-line input[type=number]{width:94px}.scan-line small{color:#b9c9da}#scan-guide{display:block;max-width:290px;width:100%;border:1px solid #46516a;border-radius:7px}#scan-result{display:grid;gap:10px}.scan-card{display:grid;grid-template-columns:106px minmax(0,1fr);gap:10px;padding:10px;border:1px solid #46516a;background:#273349;border-radius:10px}.scan-card>img{width:106px;height:62px;object-fit:cover}.scan-card header strong{min-width:0;overflow-wrap:anywhere}.scan-card header{font-size:12px;display:flex;justify-content:space-between;gap:6px}.scan-card small{color:#bbc9d9;font-size:11px}.scan-fields{display:grid;grid-template-columns:minmax(0,1fr) 80px 80px;gap:7px;margin:8px 0}.scan-fields label{font-size:11px;color:#b9c9da;min-width:0}.scan-fields select,.scan-fields input{width:100%;padding:7px 5px;min-width:0}.scan-flag{color:#ffd38f}#scan-message{min-height:20px;color:#88e1ce;font-size:13px}@media(max-width:520px){.scan-card{grid-template-columns:84px minmax(0,1fr)}.scan-card>img{width:84px;height:51px}.scan-fields{grid-template-columns:1fr 1fr}.scan-fields label:first-child{grid-column:1/-1}}';
+
+style.textContent += "\n  /* Compact verification list / iPhone */\n  #scan-result{gap:7px}\n  .scan-card{grid-template-columns:92px minmax(0,1fr);gap:9px;padding:9px;align-items:start}\n  .scan-thumbs{display:flex;flex-direction:column;gap:5px;min-width:0}\n  .scan-thumb{position:relative;min-width:0}\n  .scan-thumb img{display:block;width:92px;height:52px;object-fit:cover;border-radius:5px;border:1px solid #63718a;cursor:zoom-in}\n  .scan-thumb span{position:absolute;left:2px;bottom:1px;padding:1px 5px;background:rgba(13,18,29,.84);font-size:10px;color:white}\n  .scan-thumb .scan-missing{display:flex;width:92px;height:52px;align-items:center;justify-content:center;background:#172334;color:#d9e0ec;font-size:11px}\n  .scan-card header{align-items:center;gap:6px}\n  .scan-card header strong{line-height:1.35}\n  .scan-check{display:flex;flex-shrink:0;align-items:center;gap:4px;font-size:12px;color:#e6f7f2}\n  .scan-check input{width:19px;height:19px;accent-color:#20a68e}\n  .scan-fields{grid-template-columns:minmax(0,1fr) 73px 73px;margin:7px 0;gap:5px}\n  .scan-fields label{display:flex;flex-direction:column;gap:4px}\n  .scan-fields input,.scan-fields select{font-size:13px;padding:7px 6px}\n  .scan-details{font-size:11px;color:#b4c4d4;line-height:1.5}\n  .scan-details summary{cursor:pointer}\n  .scan-candidates{display:flex;gap:7px;overflow-x:auto;padding:7px 0}\n  .scan-candidate{width:104px;flex:0 0 104px;cursor:pointer;text-align:left;background:#172334;padding:5px;border:1px solid #455671;border-radius:7px;color:#fff}\n  .scan-candidate img{display:block;width:92px;height:52px;object-fit:cover}\n  .scan-candidate small{display:block;overflow-wrap:anywhere}\n  .scan-problem{color:#ffbd8e;font-size:11px;line-height:1.4;margin-top:5px}\n  .scan-card.scan-invalid{border-color:#e49d6c}\n  .scan-summary{position:sticky;bottom:7px;background:#142136ee;backdrop-filter:blur(9px);border:1px solid #426679;border-radius:11px;padding:10px;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap}\n  .scan-summary button{flex:0 0 auto}\n  .scan-summary strong{font-size:13px}\n  #scan-bottom-message{font-size:13px;color:#bceadb;min-height:14px}\n  #scan-zoom{max-width:min(95vw,920px);width:95vw;padding:14px;background:#192438;color:white;border:1px solid #66758f;border-radius:13px}\n  #scan-zoom::backdrop{background:#050b13d9}\n  #scan-zoom img{width:100%;height:auto;max-height:62vh;object-fit:contain}\n  #scan-zoom h3{font-size:15px;margin:0 0 10px}\n  @media(max-width:520px){\n    .scan-card{grid-template-columns:92px minmax(0,1fr);gap:7px}\n    .scan-card>img{display:none}\n    .scan-fields{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}\n    .scan-fields label:first-child{grid-column:1/-1}\n    .scan-fields input,.scan-fields select{font-size:16px}\n    .scan-summary button{width:100%}\n  }\n";
 document.head.append(style);
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -22,9 +24,11 @@ box.innerHTML=[
 '<label style="flex-direction:row;align-items:center"><input id="scan-use-ocr" type="checkbox" checked>讀取等級（OCR 首次需載入免費元件）</label>',
 '</div>',
 '<canvas id="scan-guide" hidden></canvas><p id="scan-message" role="status"></p>',
+'<div id="scan-summary" class="scan-summary" hidden><strong id="scan-count">尚未選取</strong><button id="scan-save-top" class="primary" type="button">確認匯入</button></div>',
 '<div id="scan-result"></div>',
 '<div class="scan-line" id="scan-finish" hidden><button id="scan-save" class="primary" type="button">確認並寫入勾選卡片</button>',
-'<small>不會把沒出現在截圖裡的卡片設為未持有；不會在未確認前覆蓋舊資料。</small></div>',
+'<small>沒有出現在截圖裡的卡片不會被設成未持有。</small></div>',
+'<p id="scan-bottom-message" role="status"></p>',
 '<datalist id="scan-names"></datalist>'
 ].join("");
 document.querySelector(".top").after(box);
@@ -32,7 +36,7 @@ toggle.onclick=()=>{box.hidden=!box.hidden;toggle.setAttribute("aria-expanded",S
 const cards=CATALOG.cards, lookup=new Map(cards.map(c=>[c.name,c]));
 for(const c of cards){const opt=document.createElement("option");opt.value=c.name;$("scan-names").append(opt)}
 let screenshots=[],items=[],reference=null,running=false,uploadVersion=0;
-const say=s=>{$("scan-message").textContent=s};
+const say=s=>{$("scan-message").textContent=s;const bottom=$("scan-bottom-message");if(bottom)bottom.textContent=s;};
 function percent(id,fallback,min,max){
   const value=$(id).valueAsNumber;
   return Number.isFinite(value)?Math.max(min,Math.min(max,value/100)):fallback;
@@ -219,39 +223,109 @@ render();say((items.length?"辨識完成："+items.length+" 個位置，請逐�
 }catch(e){say("辨識失敗："+e.message)}finally{if(worker)try{await worker.terminate()}catch(e){};running=false;for(const id of controls)$(id).disabled=false}
 }
 $("scan-start").onclick=scan;
+
+const zoom=document.createElement("dialog");
+zoom.id="scan-zoom";
+zoom.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><h3 id="scan-zoom-label">圖片對照</h3><button id="scan-zoom-close" type="button">關閉</button></div><img id="scan-zoom-image" alt="卡面放大對照">';
+box.append(zoom);
+$("scan-zoom-close").onclick=()=>zoom.close();
+zoom.addEventListener("click",e=>{if(e.target===zoom)zoom.close()});
+function issue(r){
+  if(!r.id||!lookup.has(r.name)||lookup.get(r.name).id!==r.id)return "請選擇有效的卡片名稱";
+  if(!Number.isInteger(r.limit)||r.limit<0||r.limit>4)return "請確認突破數（0～4 凸）";
+  if(!Number.isInteger(r.level)||r.level<1||r.level>60)return "等級未知，請手動填入 Lv1～60";
+  return "";
+}
+function cardImage(id){
+  const path=cardImages[id]?.path;
+  return path?"./"+path:"";
+}
 function render(){
-$("scan-finish").hidden=!items.length;
-$("scan-result").innerHTML=items.map((r,i)=>{
-const opts=[null,0,1,2,3,4].map(v=>'<option value="'+(v===null?"":v)+'"'+(r.limit===v?" selected":"")+'>'+(v===null?"未知":v+"凸")+'</option>').join("");
-return '<article class="scan-card" data-i="'+i+'"><img alt="截圖中的卡面" src="'+r.thumb+'"><div><header><strong>'+esc(r.file)+'，'+r.row+'列'+r.col+'張</strong><span class="scan-flag">待確認</span></header>'+
-'<div class="scan-fields"><label>候選卡名<input data-field="name" list="scan-names" value="'+esc(r.name)+'"></label>'+
-'<label>突破<select data-field="limit">'+opts+'</select></label><label>等級<input data-field="level" type="number" min="1" max="60" inputmode="numeric" value="'+(r.level??"")+'" placeholder="未知"></label></div>'+
-'<label style="font-size:12px"><input type="checkbox" data-field="confirmed"'+(r.confirmed?" checked":"")+'>我已核對這張卡，允許寫入</label> '+
-'<small>候選：'+r.candidates.map(c=>esc(c.name)).join("／")+"；突破："+esc(r.certainty)+'</small></div></article>';
-}).join("");
+  $("scan-finish").hidden=!items.length;
+  $("scan-summary").hidden=!items.length;
+  $("scan-result").innerHTML=items.map((r,i)=>{
+    const opts=[null,0,1,2,3,4].map(v=>'<option value="'+(v===null?"":v)+'"'+(r.limit===v?" selected":"")+'>'+(v===null?"未知":v+"凸")+'</option>').join("");
+    const ref=cardImage(r.id);
+    const refimg=ref?'<img src="'+esc(ref)+'" data-zoom="'+esc(ref)+'" data-zoom-label="資料庫卡圖：'+esc(r.name)+'" alt="資料庫參考卡圖" loading="lazy">':'<div class="scan-missing">無參考圖片</div>';
+    const candidates=r.candidates.map(c=>{
+      const src=cardImage(c.id);
+      return '<button type="button" class="scan-candidate" data-candidate="'+esc(c.name)+'">'+
+        (src?'<img src="'+esc(src)+'" alt="'+esc(c.name)+'" loading="lazy">':'')+
+        '<small>'+esc(c.name)+'</small></button>';
+    }).join("");
+    const warning=r.confirmed?issue(r):"";
+    return '<article class="scan-card'+(warning?' scan-invalid':'')+'" data-i="'+i+'">'+
+      '<div class="scan-thumbs"><div class="scan-thumb"><img src="'+r.thumb+'" data-zoom="'+r.thumb+'" data-zoom-label="遊戲截圖：第'+r.row+'列第'+r.col+'張" alt="遊戲截圖裁切"><span>遊戲截圖</span></div>'+
+      '<div class="scan-thumb">'+refimg+'<span>資料庫對照</span></div></div>'+
+      '<div class="scan-main"><header><strong>'+esc(r.row)+'列'+esc(r.col)+'張 · '+esc(r.file)+'</strong>'+
+      '<label class="scan-check"><input type="checkbox" data-field="confirmed"'+(r.confirmed?' checked':'')+'>核對</label></header>'+
+      '<div class="scan-fields"><label>卡名<input data-field="name" list="scan-names" value="'+esc(r.name)+'"></label>'+
+      '<label>突破<select data-field="limit">'+opts+'</select></label>'+
+      '<label>等級<input data-field="level" type="number" min="1" max="60" inputmode="numeric" value="'+(r.level??"")+'" placeholder="未知"></label></div>'+
+      '<details class="scan-details"><summary>辨識候選（點圖可切換卡名） · 突破：'+esc(r.certainty)+'</summary><div class="scan-candidates">'+candidates+'</div></details>'+
+      (warning?'<div class="scan-problem">'+esc(warning)+'</div>':'')+
+      '</div></article>';
+  }).join("");
+  updateSummary();
+}
+function updateSummary(){
+  const selected=items.filter(r=>r.confirmed),incomplete=selected.filter(r=>issue(r));
+  const ok=selected.length-incomplete.length;
+  $("scan-count").textContent="已勾選 "+selected.length+" 張 · 資料完整 "+ok+" 張"+(incomplete.length?" · 待補 "+incomplete.length+" 張":"");
+  $("scan-save-top").textContent="確認匯入 "+ok+" 張";
+  $("scan-save").textContent="確認並寫入 "+ok+" 張";
 }
 $("scan-result").onchange=e=>{
-const item=e.target.closest(".scan-card");if(!item)return;
-const r=items[Number(item.dataset.i)],field=e.target.dataset.field;
-if(field==="name"){r.name=e.target.value.trim();r.id=lookup.get(r.name)?.id||""}
-if(field==="limit")r.limit=e.target.value===""?null:Number(e.target.value);
-if(field==="level"){const n=Number(e.target.value);r.level=e.target.value!==""&&Number.isInteger(n)&&n>0&&n<=60?n:null}
-if(field==="confirmed")r.confirmed=e.target.checked;
-else{r.confirmed=false;item.querySelector('[data-field="confirmed"]').checked=false}
+  const item=e.target.closest(".scan-card");if(!item)return;
+  const r=items[Number(item.dataset.i)],field=e.target.dataset.field;
+  if(field==="name"){r.name=e.target.value.trim();r.id=lookup.get(r.name)?.id||""}
+  if(field==="limit")r.limit=e.target.value===""?null:Number(e.target.value);
+  if(field==="level"){const n=Number(e.target.value);r.level=e.target.value!==""&&Number.isInteger(n)&&n>0&&n<=60?n:null}
+  if(field==="confirmed")r.confirmed=e.target.checked;
+  else{r.confirmed=false}
+  render();
 };
-$("scan-save").onclick=()=>{
-const chosen=items.filter(r=>r.confirmed);
-const valid=chosen.filter(r=>r.id&&Number.isInteger(r.limit)&&r.limit>=0&&r.limit<=4&&Number.isInteger(r.level)&&r.level>0&&r.level<=60);
-if(!valid.length){say("請先把卡名、突破和等級填妥，並勾選要匯入的卡片");return}
-if(valid.length!==chosen.length){say("部分已勾選的卡片資料不完整，請修正或取消勾選");return}
-const seen=new Set(),duplicates=[];
-for(const r of valid){if(seen.has(r.id))duplicates.push(r.name);seen.add(r.id)}
-if(duplicates.length){say("重複選到同一張卡，請只保留一筆："+duplicates.join("、"));return}
-const changed=valid.filter(r=>own[r.id]?.status==="owned"&&(own[r.id]?.limit!==r.limit||own[r.id]?.level!==r.level));
-if(!confirm("將匯入 "+valid.length+" 張卡，其中 "+changed.length+" 張會改變既有突破或等級。確定寫入？"))return;
-const next={...own};
-for(const r of valid)next[r.id]={...own[r.id],status:"owned",limit:r.limit,level:r.level};
-if(!persist(next)){say("瀏覽器儲存失敗，這次匯入未寫入。");return}
-own=next;draw();say("已儲存 "+valid.length+" 張，建議立刻匯出收藏 JSON 備份。");
+$("scan-result").onclick=e=>{
+  const image=e.target.closest("[data-zoom]");
+  if(image){
+    $("scan-zoom-image").src=image.dataset.zoom;
+    $("scan-zoom-label").textContent=image.dataset.zoomLabel||"卡面對照";
+    zoom.showModal();
+    return;
+  }
+  const candidate=e.target.closest("[data-candidate]");
+  if(candidate){
+    const art=candidate.closest(".scan-card");
+    const r=items[Number(art.dataset.i)];
+    r.name=candidate.dataset.candidate;
+    r.id=lookup.get(r.name)?.id||"";
+    r.confirmed=false;
+    render();
+  }
 };
+function saveSelections(){
+  const chosen=items.filter(r=>r.confirmed);
+  if(!chosen.length){say("請先核對卡片圖片和數值，並勾選想匯入的卡片。");$("scan-summary").scrollIntoView({behavior:"smooth",block:"center"});return}
+  const firstInvalid=chosen.find(r=>issue(r));
+  if(firstInvalid){
+    const problem=issue(firstInvalid);
+    say("還有 "+chosen.filter(r=>issue(r)).length+" 張已勾選的卡片資料不完整："+problem+"。請填完後再匯入。");
+    render();
+    const target=$("scan-result").querySelector('.scan-card[data-i="'+items.indexOf(firstInvalid)+'"]');
+    if(target){target.scrollIntoView({behavior:"smooth",block:"center"});const field=problem.includes("等級")?'level':problem.includes("突破")?'limit':'name';target.querySelector('[data-field="'+field+'"]')?.focus({preventScroll:true})}
+    return;
+  }
+  const seen=new Set(),duplicates=[];
+  for(const r of chosen){if(seen.has(r.id))duplicates.push(r.name);seen.add(r.id)}
+  if(duplicates.length){say("同張卡在多張截圖中重複勾選，請只保留一筆："+duplicates.join("、"));return}
+  const changed=chosen.filter(r=>own[r.id]?.status==="owned"&&(own[r.id]?.limit!==r.limit||own[r.id]?.level!==r.level));
+  if(!confirm("將匯入 "+chosen.length+" 張卡，其中 "+changed.length+" 張會更新先前的突破或等級。確定？"))return;
+  const next={...own};
+  for(const r of chosen)next[r.id]={...own[r.id],status:"owned",limit:r.limit,level:r.level};
+  if(!persist(next)){say("儲存失敗，收藏沒有被修改。請先匯出 JSON 備份。");return}
+  own=next;draw();say("已儲存 "+chosen.length+" 張！可以匯出 JSON 備份。");
+  items=items.filter(r=>!r.confirmed);render();
+}
+$("scan-save").onclick=saveSelections;
+$("scan-save-top").onclick=saveSelections;
 })();
