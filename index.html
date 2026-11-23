@@ -92,7 +92,7 @@ let cardImages={};
 const el=id=>document.getElementById(id);
 function initialRead(){try{const v=JSON.parse(localStorage.getItem(KEY));if(v&&typeof v==='object')own=v;}catch(e){flash('無法讀取瀏覽器記錄：請透過 JSON 匯入。')}}
 function flash(message){el('notice').textContent=message;setTimeout(()=>{if(el('notice').textContent===message)el('notice').textContent=''},3500)}
-function persist(){try{localStorage.setItem(KEY,JSON.stringify(own))}catch(e){flash('瀏覽器儲存失敗，請匯出 JSON 保存')}}
+function persist(inventory=own){try{localStorage.setItem(KEY,JSON.stringify(inventory));return true}catch(e){flash('瀏覽器儲存失敗，請匯出 JSON 保存');return false}}
 function esc(s){return String(s).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
 function cardHTML(c){
  const item=own[c.id]||{status:'unknown',limit:0,level:null};

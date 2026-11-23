@@ -2,11 +2,11 @@
 (()=>{
 "use strict";
 const style=document.createElement("style");
-style.textContent='#scan-panel{margin:16px 0;padding:16px;background:#1c2230;border:1px solid #374358;border-radius:14px}#scan-panel[hidden],#scan-finish[hidden]{display:none}#scan-panel h2{font-size:19px;margin:0 0 9px}.scan-line{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin:10px 0}.scan-line label{display:flex;flex-direction:column;gap:4px;color:#b9c9da;font-size:12px}.scan-line input[type=number]{width:94px}.scan-line small{color:#b9c9da}#scan-guide{display:block;max-width:290px;width:100%;border:1px solid #46516a;border-radius:7px}#scan-result{display:grid;gap:10px}.scan-card{display:grid;grid-template-columns:106px minmax(0,1fr);gap:10px;padding:10px;border:1px solid #46516a;background:#273349;border-radius:10px}.scan-card>img{width:106px;height:62px;object-fit:cover}.scan-card header{font-size:12px;display:flex;justify-content:space-between;gap:6px}.scan-card small{color:#bbc9d9;font-size:11px}.scan-fields{display:grid;grid-template-columns:minmax(0,1fr) 80px 80px;gap:7px;margin:8px 0}.scan-fields label{font-size:11px;color:#b9c9da;min-width:0}.scan-fields select,.scan-fields input{width:100%;padding:7px 5px;min-width:0}.scan-flag{color:#ffd38f}#scan-message{min-height:20px;color:#88e1ce;font-size:13px}@media(max-width:520px){.scan-card{grid-template-columns:84px minmax(0,1fr)}.scan-card>img{width:84px;height:51px}.scan-fields{grid-template-columns:1fr 1fr}.scan-fields label:first-child{grid-column:1/-1}}';
+style.textContent='#scan-panel{margin:16px 0;padding:16px;background:#1c2230;border:1px solid #374358;border-radius:14px}#scan-panel[hidden],#scan-finish[hidden]{display:none}#scan-panel h2{font-size:19px;margin:0 0 9px}.scan-line{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin:10px 0}.scan-line label{min-width:0;display:flex;flex-direction:column;gap:4px;color:#b9c9da;font-size:12px}.scan-line input[type=file]{max-width:100%}.scan-line input[type=number]{width:94px}.scan-line small{color:#b9c9da}#scan-guide{display:block;max-width:290px;width:100%;border:1px solid #46516a;border-radius:7px}#scan-result{display:grid;gap:10px}.scan-card{display:grid;grid-template-columns:106px minmax(0,1fr);gap:10px;padding:10px;border:1px solid #46516a;background:#273349;border-radius:10px}.scan-card>img{width:106px;height:62px;object-fit:cover}.scan-card header strong{min-width:0;overflow-wrap:anywhere}.scan-card header{font-size:12px;display:flex;justify-content:space-between;gap:6px}.scan-card small{color:#bbc9d9;font-size:11px}.scan-fields{display:grid;grid-template-columns:minmax(0,1fr) 80px 80px;gap:7px;margin:8px 0}.scan-fields label{font-size:11px;color:#b9c9da;min-width:0}.scan-fields select,.scan-fields input{width:100%;padding:7px 5px;min-width:0}.scan-flag{color:#ffd38f}#scan-message{min-height:20px;color:#88e1ce;font-size:13px}@media(max-width:520px){.scan-card{grid-template-columns:84px minmax(0,1fr)}.scan-card>img{width:84px;height:51px}.scan-fields{grid-template-columns:1fr 1fr}.scan-fields label:first-child{grid-column:1/-1}}';
 document.head.append(style);
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const toggle=document.createElement("button");toggle.type="button";toggle.textContent="從遊戲截圖讀取";
+const toggle=document.createElement("button");toggle.type="button";toggle.setAttribute("aria-controls","scan-panel");toggle.setAttribute("aria-expanded","false");toggle.textContent="從遊戲截圖讀取";
 document.querySelector(".actions").append(toggle);
 const box=document.createElement("section");box.id="scan-panel";box.hidden=true;
 box.innerHTML=[
@@ -16,7 +16,7 @@ box.innerHTML=[
 '<label>上傳截圖（最多 20 張）<input id="scan-files" type="file" multiple accept="image/png,image/jpeg,image/webp"></label>',
 '<label>第一列頂端 %<input id="scan-top" type="number" min="10" max="80" step="0.1" value="32.9"></label>',
 '<label>左側邊距 %<input id="scan-left" type="number" min="0" max="20" step="0.1" value="4.4"></label>',
-'<label>辨識列數<select id="scan-rows"><option>3</option><option selected>4</option><option>5</option><option>6</option></select></label>',
+'<label>辨識列數<select id="scan-rows"><option>1</option><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option></select></label>',
 '</div><div class="scan-line">',
 '<button id="scan-check" type="button">檢查裁切框</button><button id="scan-start" class="primary" type="button">辨識截圖</button>',
 '<label style="flex-direction:row;align-items:center"><input id="scan-use-ocr" type="checkbox" checked>讀取等級（OCR 首次需載入免費元件）</label>',
@@ -28,25 +28,60 @@ box.innerHTML=[
 '<datalist id="scan-names"></datalist>'
 ].join("");
 document.querySelector(".top").after(box);
-toggle.onclick=()=>{box.hidden=!box.hidden;if(!box.hidden)box.scrollIntoView({behavior:"smooth",block:"start"})};
+toggle.onclick=()=>{box.hidden=!box.hidden;toggle.setAttribute("aria-expanded",String(!box.hidden));if(!box.hidden)box.scrollIntoView({behavior:"smooth",block:"start"})};
 const cards=CATALOG.cards, lookup=new Map(cards.map(c=>[c.name,c]));
 for(const c of cards){const opt=document.createElement("option");opt.value=c.name;$("scan-names").append(opt)}
-let screenshots=[],items=[],reference=null,running=false;
+let screenshots=[],items=[],reference=null,running=false,uploadVersion=0;
 const say=s=>{$("scan-message").textContent=s};
-function settings(){return {top:Math.max(.10,Math.min(.8,Number($("scan-top").value)/100||.329)),left:Math.max(0,Math.min(.2,Number($("scan-left").value)/100||.044)),rows:Number($("scan-rows").value)||4}}
-function area(img,row,col){const s=settings();return {x:(s.left+col*.307)*img.width,y:s.top*img.height+row*.176*img.width,w:.294*img.width,h:.163*img.width}}
+function percent(id,fallback,min,max){
+  const value=$(id).valueAsNumber;
+  return Number.isFinite(value)?Math.max(min,Math.min(max,value/100)):fallback;
+}
+function settings(){
+  return {top:percent("scan-top",.329,.1,.8),left:percent("scan-left",.044,0,.2),rows:Number($("scan-rows").value)};
+}
+function cropAreas(img,layout){
+  const areas=[];
+  for(let row=0;row<layout.rows;row++)for(let col=0;col<3;col++){
+    const x=(layout.left+col*.307)*img.width;
+    const y=layout.top*img.height+row*.176*img.width;
+    const w=.294*img.width,h=.163*img.width;
+    if(x+w<=img.width&&y+h<=img.height)areas.push({row:row+1,col:col+1,x,y,w,h});
+  }
+  return areas;
+}
 function canvas(w,h){const c=document.createElement("canvas");c.width=Math.max(1,Math.round(w));c.height=Math.max(1,Math.round(h));return c}
 function loadImage(url){return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error("圖片無法載入"));img.src=url})}
-async function onFiles(){screenshots=[];items=[];render();const files=Array.from($("scan-files").files||[]).slice(0,20);
-for(const file of files){const url=URL.createObjectURL(file);try{screenshots.push({file:file.name,img:await loadImage(url)})}catch(err){say(file.name+" 讀取失敗")}finally{URL.revokeObjectURL(url)}}
-if(screenshots.length)drawGuide()}
+async function onFiles(){
+  const version=++uploadVersion;
+  screenshots=[];items=[];render();
+  $("scan-guide").hidden=true;
+  $("scan-start").disabled=true;
+  const files=Array.from($("scan-files").files||[]).slice(0,20);
+  const loaded=[],failed=[];
+  for(const file of files){
+    const url=URL.createObjectURL(file);
+    try{loaded.push({file:file.name,img:await loadImage(url)})}
+    catch(err){failed.push(file.name)}
+    finally{URL.revokeObjectURL(url)}
+    if(version!==uploadVersion)return;
+  }
+  screenshots=loaded;
+  $("scan-start").disabled=false;
+  if(screenshots.length)drawGuide();
+  else say("請上傳可讀取的 PNG、JPEG 或 WebP 截圖。");
+  if(failed.length)say($("scan-message").textContent+" 讀取失敗："+failed.join("、"));
+}
 $("scan-files").onchange=onFiles;
 function drawGuide(){
-if(!screenshots.length){say("請先上傳一張遊戲截圖");return}
-const img=screenshots[0].img,c=$("scan-guide");c.height=550;c.width=Math.round(550*img.width/img.height);c.hidden=false;
-const ctx=c.getContext("2d");ctx.drawImage(img,0,0,c.width,c.height);ctx.strokeStyle="#60ffd5";ctx.lineWidth=2;
-for(let row=0;row<settings().rows;row++)for(let col=0;col<3;col++){const r=area(img,row,col);ctx.strokeRect(r.x*c.width/img.width,r.y*c.height/img.height,r.w*c.width/img.width,r.h*c.height/img.height)}
-say("確認綠框對準每張小卡片；若錯位，調整首列頂端／左邊距後重按「檢查裁切框」。");
+  if(!screenshots.length){say("請先上傳一張遊戲截圖");return}
+  const img=screenshots[0].img,c=$("scan-guide");
+  c.height=550;c.width=Math.round(550*img.width/img.height);c.hidden=false;
+  const ctx=c.getContext("2d");
+  ctx.drawImage(img,0,0,c.width,c.height);ctx.strokeStyle="#60ffd5";ctx.lineWidth=2;
+  const areas=cropAreas(img,settings());
+  for(const r of areas)ctx.strokeRect(r.x*c.width/img.width,r.y*c.height/img.height,r.w*c.width/img.width,r.h*c.height/img.height);
+  say("第一張截圖共有 "+areas.length+" 個完整裁切框。請確認每列三張位置對準。");
 }
 $("scan-check").onclick=drawGuide;
 function cut(img,r){const c=canvas(210,116);c.getContext("2d").drawImage(img,r.x,r.y,r.w,r.h,0,0,210,116);return c}
@@ -88,43 +123,84 @@ const scores=[.29,.40,.51,.62].map(bright),flags=scores.map(v=>v>.29);
 const prefix=flags.every((v,i)=>!v||flags.slice(0,i).every(Boolean));
 return {value:prefix?flags.filter(Boolean).length:null,certainty:prefix&&scores.every(v=>v<.14||v>.42)?"看似清楚":"需確認"};
 }
+const OCR_DIST="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/";
+const OCR_LANG="https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int";
+function deadline(promise,ms,message){
+  let timer;
+  const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(message)),ms)});
+  return Promise.race([promise,timeout]).finally(()=>clearTimeout(timer));
+}
 async function createOCR(){
-if(!window.Tesseract){await new Promise((resolve,reject)=>{const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";s.onload=resolve;s.onerror=reject;document.head.append(s)})}
-if(!window.Tesseract)throw Error("OCR 無法載入");
-const worker=await window.Tesseract.createWorker("eng",1);
-await worker.setParameters({tessedit_char_whitelist:"0123456789",tessedit_pageseg_mode:"7"});
-return worker;
+  if(!window.Tesseract){
+    const script=document.createElement("script");
+    script.src=OCR_DIST+"tesseract.min.js";
+    try{
+      await deadline(new Promise((resolve,reject)=>{
+        script.onload=resolve;
+        script.onerror=()=>reject(new Error("無法下載 OCR 元件"));
+        document.head.append(script);
+      }),15000,"下載 OCR 元件逾時");
+    }catch(err){script.remove();throw err}
+  }
+  let fail;
+  const failure=new Promise((_,reject)=>{fail=reject});
+  const pending=window.Tesseract.createWorker("eng",1,{
+    workerPath:OCR_DIST+"worker.min.js",
+    corePath:"https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1",
+    langPath:OCR_LANG,
+    errorHandler:error=>fail(new Error(String(error)))
+  });
+  const initialization=Promise.race([pending,failure]);
+  let worker;
+  try{
+    worker=await deadline(initialization,30000,"啟動 OCR 逾時");
+    await deadline(worker.setParameters({tessedit_char_whitelist:"0123456789",tessedit_pageseg_mode:"7"}),10000,"設定 OCR 逾時");
+    return worker;
+  }catch(err){
+    if(worker)await worker.terminate().catch(()=>{});
+    else pending.then(late=>late.terminate()).catch(()=>{});
+    throw err;
+  }
 }
 async function guessLevel(worker,tile){
 const c=canvas(180,95),ctx=c.getContext("2d",{willReadFrequently:true});
-ctx.drawImage(tile,0,tile.height*.68,tile.width*.26,tile.height*.29,0,0,180,95);
+ctx.drawImage(tile,0,tile.height*.71,tile.width*.245,tile.height*.25,0,0,180,95);
 const pixels=ctx.getImageData(0,0,180,95),d=pixels.data;
 for(let k=0;k<d.length;k+=4){const v=d[k]>174&&d[k+1]>164&&d[k+2]>156?0:255;d[k]=d[k+1]=d[k+2]=v}
 ctx.putImageData(pixels,0,0);
-const res=await worker.recognize(c),nums=(res.data.text||"").match(/\d{1,2}/g)||[];
-const accepted=nums.map(Number).filter(n=>n>0&&n<=60);
-return accepted.length===1?accepted[0]:null;
+const {data}=await deadline(worker.recognize(c),10000,"辨識等級逾時");
+const digits=data.text.trim();
+const level=Number(digits);
+return /^\d{1,2}$/.test(digits)&&level>=1&&level<=60&&data.confidence>=60?level:null;
 }
 async function scan(){
 if(running)return;
 if(!screenshots.length){say("請先上傳截圖");return}
-running=true;$("scan-start").disabled=true;items=[];render();let worker=null;
+const layout=settings();
+const controls=["scan-files","scan-top","scan-left","scan-rows","scan-check","scan-start","scan-use-ocr"];
+running=true;
+for(const id of controls)$(id).disabled=true;
+items=[];render();let worker=null,ocrIssue="";
 try{
 const ref=await references();
-if($("scan-use-ocr").checked){try{say("準備 OCR 元件…");worker=await createOCR()}catch(e){say("OCR 無法使用，等級需要手動填寫："+e.message)}}
-for(const shot of screenshots)for(let row=0;row<settings().rows;row++)for(let col=0;col<3;col++){
-const b=area(shot.img,row,col);
-if(b.y+b.h>shot.img.height*.89)continue;
+if($("scan-use-ocr").checked){try{say("準備 OCR 元件…");worker=await createOCR()}catch(e){ocrIssue="OCR 無法使用，請手動填寫等級。";console.warn(e)}}
+for(const shot of screenshots)for(const b of cropAreas(shot.img,layout)){
 const tile=cut(shot.img,b),fv=feature(tile);
+if(fv.every(value=>Math.abs(value)<.05))continue;
 const top=ref.map(c=>({id:c.id,name:c.name,d:metric(fv,c.v)})).sort((a,b)=>a.d-b.d).slice(0,3);
 const br=guessLimit(tile);
-let lv=null;if(worker)try{lv=await guessLevel(worker,tile)}catch(e){}
-items.push({file:shot.file,row:row+1,col:col+1,name:top[0]?.name||"",id:top[0]?.id||"",limit:br.value,
+let lv=null;
+if(worker)try{lv=await guessLevel(worker,tile)}catch(e){
+  ocrIssue="OCR 中途停止，請手動補齊空白等級。";
+  const failedWorker=worker;worker=null;
+  await failedWorker.terminate().catch(()=>{});
+}
+items.push({file:shot.file,row:b.row,col:b.col,name:top[0]?.name||"",id:top[0]?.id||"",limit:br.value,
 level:lv,candidates:top,certainty:br.certainty,confirmed:false,thumb:tile.toDataURL("image/jpeg",.85)});
 say("已辨識 "+items.length+" 個卡片位置…");
 }
-render();say("辨識完成："+items.length+" 個位置。卡名、Lv、突破皆為初步猜測，請逐張核對後勾選匯入。");
-}catch(e){say("辨識失敗："+e.message)}finally{if(worker)try{await worker.terminate()}catch(e){};running=false;$("scan-start").disabled=false}
+render();say((items.length?"辨識完成："+items.length+" 個位置，請逐張核對後勾選匯入。":"完整裁切框內沒有偵測到卡面，請檢查截圖與裁切位置。")+" "+ocrIssue);
+}catch(e){say("辨識失敗："+e.message)}finally{if(worker)try{await worker.terminate()}catch(e){};running=false;for(const id of controls)$(id).disabled=false}
 }
 $("scan-start").onclick=scan;
 function render(){
@@ -157,7 +233,9 @@ for(const r of valid){if(seen.has(r.id))duplicates.push(r.name);seen.add(r.id)}
 if(duplicates.length){say("重複選到同一張卡，請只保留一筆："+duplicates.join("、"));return}
 const changed=valid.filter(r=>own[r.id]?.status==="owned"&&(own[r.id]?.limit!==r.limit||own[r.id]?.level!==r.level));
 if(!confirm("將匯入 "+valid.length+" 張卡，其中 "+changed.length+" 張會改變既有突破或等級。確定寫入？"))return;
-for(const r of valid)own[r.id]={status:"owned",limit:r.limit,level:r.level};
-persist();draw();say("已儲存 "+valid.length+" 張，建議立刻匯出收藏 JSON 備份。");
+const next={...own};
+for(const r of valid)next[r.id]={...own[r.id],status:"owned",limit:r.limit,level:r.level};
+if(!persist(next)){say("瀏覽器儲存失敗，這次匯入未寫入。");return}
+own=next;draw();say("已儲存 "+valid.length+" 張，建議立刻匯出收藏 JSON 備份。");
 };
 })();
