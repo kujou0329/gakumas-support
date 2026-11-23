@@ -88,16 +88,24 @@ function cut(img,r){const c=canvas(210,116);c.getContext("2d").drawImage(img,r.x
 function feature(img){
 const c=canvas(20,12),ctx=c.getContext("2d",{willReadFrequently:true});
 ctx.drawImage(img,img.width*.035,img.height*.04,img.width*.93,img.height*.61,0,0,20,12);
-const data=ctx.getImageData(0,0,20,12).data,out=[];
+const data=ctx.getImageData(0,0,20,12).data,texture=[],color=[];
 for(let channel=0;channel<3;channel++){
 let a=[];for(let i=channel;i<data.length;i+=4)a.push(data[i]);
 const avg=a.reduce((s,x)=>s+x,0)/a.length;
 const sd=Math.sqrt(a.reduce((s,x)=>s+(x-avg)*(x-avg),0)/a.length)+16;
-for(const n of a)out.push((n-avg)/sd);
+color.push(avg/90);
+for(const n of a)texture.push((n-avg)/sd);
 }
-return out;
+return {texture,color};
 }
-function metric(a,b){let s=0;for(let i=0;i<a.length;i++)s+=(a[i]-b[i])**2;return s/a.length}
+function averageSquaredDistance(a,b){
+  let sum=0;
+  for(let i=0;i<a.length;i++)sum+=(a[i]-b[i])**2;
+  return sum/a.length;
+}
+function metric(a,b){
+  return averageSquaredDistance(a.texture,b.texture)+averageSquaredDistance(a.color,b.color)/3;
+}
 async function references(){
 if(reference)return reference;
 const list=cards.filter(c=>cardImages[c.id]?.path);if(!list.length)throw Error("卡圖尚未載入，請先確認顯示 213 張卡圖後重試");
@@ -162,16 +170,24 @@ async function createOCR(){
     throw err;
   }
 }
+async function readLevel(worker,tile,{top,right,height,threshold}){
+  const c=canvas(184,110),ctx=c.getContext("2d",{willReadFrequently:true});
+  ctx.fillStyle="#000";
+  ctx.fillRect(0,0,c.width,c.height);
+  ctx.drawImage(tile,0,tile.height*top,tile.width*right,tile.height*height,12,12,160,86);
+  const pixels=ctx.getImageData(0,0,c.width,c.height),d=pixels.data;
+  for(let k=0;k<d.length;k+=4){
+    const luminance=.299*d[k]+.587*d[k+1]+.114*d[k+2];
+    d[k]=d[k+1]=d[k+2]=luminance>=threshold?0:255;
+  }
+  ctx.putImageData(pixels,0,0);
+  const {data}=await deadline(worker.recognize(c),10000,"辨識等級逾時");
+  const digits=data.text.trim(),level=Number(digits);
+  return /^\d{1,2}$/.test(digits)&&level>=1&&level<=60&&data.confidence>=60?level:null;
+}
 async function guessLevel(worker,tile){
-const c=canvas(180,95),ctx=c.getContext("2d",{willReadFrequently:true});
-ctx.drawImage(tile,0,tile.height*.71,tile.width*.245,tile.height*.25,0,0,180,95);
-const pixels=ctx.getImageData(0,0,180,95),d=pixels.data;
-for(let k=0;k<d.length;k+=4){const v=d[k]>174&&d[k+1]>164&&d[k+2]>156?0:255;d[k]=d[k+1]=d[k+2]=v}
-ctx.putImageData(pixels,0,0);
-const {data}=await deadline(worker.recognize(c),10000,"辨識等級逾時");
-const digits=data.text.trim();
-const level=Number(digits);
-return /^\d{1,2}$/.test(digits)&&level>=1&&level<=60&&data.confidence>=60?level:null;
+  const level=await readLevel(worker,tile,{top:.69,right:.21,height:.22,threshold:220});
+  return level??await readLevel(worker,tile,{top:.71,right:.245,height:.25,threshold:175});
 }
 async function scan(){
 if(running)return;
@@ -186,7 +202,7 @@ const ref=await references();
 if($("scan-use-ocr").checked){try{say("準備 OCR 元件…");worker=await createOCR()}catch(e){ocrIssue="OCR 無法使用，請手動填寫等級。";console.warn(e)}}
 for(const shot of screenshots)for(const b of cropAreas(shot.img,layout)){
 const tile=cut(shot.img,b),fv=feature(tile);
-if(fv.every(value=>Math.abs(value)<.05))continue;
+if(fv.texture.every(value=>Math.abs(value)<.05))continue;
 const top=ref.map(c=>({id:c.id,name:c.name,d:metric(fv,c.v)})).sort((a,b)=>a.d-b.d).slice(0,3);
 const br=guessLimit(tile);
 let lv=null;
