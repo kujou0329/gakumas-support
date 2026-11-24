@@ -20,7 +20,7 @@ style.textContent=`
 #scan-frames button:focus-visible{outline:2px solid #fff;outline-offset:2px}
 #scan-adjust label{max-width:100%}
 #scan-shot{max-width:100%}
-#scan-adjust button{padding:6px 9px}
+#scan-adjust button{padding:6px 9px}#scan-adjust-mode{min-width:155px}#scan-group-hint{font-size:12px;color:#bceadb;line-height:1.5;margin:0 0 5px}
 #scan-result{display:grid;gap:7px}
 .scan-card{display:grid;grid-template-columns:188px minmax(0,1fr);gap:7px 10px;padding:8px;border:1px solid #46516a;background:#273349;border-radius:10px}
 .scan-card header{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:12px}
@@ -72,9 +72,10 @@ box.innerHTML=[
  '<div id="scan-preview-controls" hidden><div class="scan-line" id="scan-adjust">',
 '<label>預覽截圖<select id="scan-shot"></select></label>',
 '<label>微調步長<select id="scan-step"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>',
+'<label>調整方式<select id="scan-adjust-mode"><option value="group" selected>整組平移（推薦）</option><option value="single">單張微調</option></select></label>',
 '<button type="button" id="scan-add">新增裁切框</button><button type="button" id="scan-remove">移除選取框</button>',
 '<button type="button" data-move="ArrowLeft" aria-label="裁切框左移">←</button><button type="button" data-move="ArrowUp" aria-label="裁切框上移">↑</button><button type="button" data-move="ArrowDown" aria-label="裁切框下移">↓</button><button type="button" data-move="ArrowRight" aria-label="裁切框右移">→</button>',
-'</div><div id="scan-preview"><canvas id="scan-guide" aria-label="截圖裁切預覽"></canvas><div id="scan-frames"></div></div></div>',
+'</div><p id="scan-group-hint">預設拖動任一綠框，或按方向鍵，即可讓目前截圖的全部裁切框一起平移；各張截圖獨立調整。</p><div id="scan-preview"><canvas id="scan-guide" aria-label="截圖裁切預覽"></canvas><div id="scan-frames"></div></div></div>',
 '<div class="scan-line">',
 '<button id="scan-start" class="primary" type="button" disabled>辨識已確認的裁切框</button>',
 '<label style="flex-direction:row;align-items:center"><input id="scan-use-ocr" type="checkbox" checked>讀取等級（OCR 首次需載入免費元件）</label>',
@@ -175,6 +176,7 @@ let shotIndex=0,frameIndex=-1,drag=null;
 const moves={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
 function activeShot(){return screenshots[shotIndex]}
 function selectedFrame(){return activeShot()?.frames[frameIndex]}
+function groupMode(){return $("scan-adjust-mode").value==="group"}
 async function onFiles(){
   const version=++uploadVersion;
   screenshots=[];items=[];importStatus("");render();
@@ -216,7 +218,8 @@ function selectFrame(index){
   frameIndex=index;
   for(const button of $("scan-frames").children)button.setAttribute("aria-pressed",String(Number(button.dataset.frame)===index));
   $("scan-remove").disabled=index<0;
-  for(const button of box.querySelectorAll("[data-move]"))button.disabled=index<0;
+  const hasFrames=Boolean(activeShot()?.frames.length);
+  for(const button of box.querySelectorAll("[data-move]"))button.disabled=running||!hasFrames||(!groupMode()&&index<0);
 }
 function renderFrames(){
   const frames=activeShot().frames;
@@ -230,7 +233,7 @@ function renderFrames(){
   }));
   selectFrame(frameIndex);
   $("scan-start").disabled=!screenshots.some(shot=>shot.frames.length);
-  say(frames.length?"此截圖有 "+frames.length+" 個裁切框。可拖曳或用方向鍵微調，遮擋的卡片請移除。":"此截圖找不到完整卡框，可新增裁切框後拖曳至完整卡片。");
+  say(frames.length?"此截圖有 "+frames.length+" 個裁切框。"+(groupMode()?"拖曳任一框或用方向鍵，就能整組平移。":"目前是單張微調模式。")+" 遮擋的卡片可移除。":"此截圖找不到完整卡框，可新增裁切框後拖曳至完整卡片。");
 }
 function moveFrame(x,y){
   const frame=selectedFrame();
@@ -240,12 +243,26 @@ function moveFrame(x,y){
   frame.y=Math.round(Math.max(0,Math.min(img.height-frame.h,y)));
   syncFrame($("scan-frames").children[frameIndex],frame);
 }
-function nudge(key){
-  const frame=selectedFrame();
-  if(!frame)return;
-  const [dx,dy]=moves[key],step=Number($("scan-step").value);
-  moveFrame(frame.x+dx*step,frame.y+dy*step);
+function shiftGroup(dx,dy){
+  const shot=activeShot();
+  if(!shot?.frames.length||running)return {dx:0,dy:0};
+  const frames=shot.frames;
+  const minX=Math.max(...frames.map(f=>-f.x));
+  const maxX=Math.min(...frames.map(f=>shot.img.width-f.w-f.x));
+  const minY=Math.max(...frames.map(f=>-f.y));
+  const maxY=Math.min(...frames.map(f=>shot.img.height-f.h-f.y));
+  dx=Math.round(Math.max(minX,Math.min(maxX,dx)));
+  dy=Math.round(Math.max(minY,Math.min(maxY,dy)));
+  frames.forEach((f,i)=>{f.x+=dx;f.y+=dy;syncFrame($("scan-frames").children[i],f)});
+  return {dx,dy};
 }
+function nudge(key){
+  if(!moves[key])return;
+  const [dx,dy]=moves[key],step=Number($("scan-step").value);
+  if(groupMode()){shiftGroup(dx*step,dy*step);return}
+  const frame=selectedFrame();if(frame)moveFrame(frame.x+dx*step,frame.y+dy*step);
+}
+$("scan-adjust-mode").onchange=()=>renderFrames();
 $("scan-shot").onchange=e=>{shotIndex=Number(e.target.value);frameIndex=-1;drag=null;drawGuide()};
 $("scan-frames").onclick=e=>{const button=e.target.closest("[data-frame]");if(button&&!running)selectFrame(Number(button.dataset.frame))};
 $("scan-frames").onkeydown=e=>{
@@ -257,13 +274,18 @@ $("scan-frames").onpointerdown=e=>{
   if(!button||running||e.button!==0)return;
   selectFrame(Number(button.dataset.frame));
   const frame=selectedFrame();
-  drag={id:e.pointerId,x:e.clientX,y:e.clientY,frameX:frame.x,frameY:frame.y};
+  drag={id:e.pointerId,x:e.clientX,y:e.clientY,frameX:frame.x,frameY:frame.y,group:groupMode(),appliedX:0,appliedY:0};
   button.setPointerCapture(e.pointerId);
 };
 $("scan-frames").onpointermove=e=>{
   if(!drag||drag.id!==e.pointerId)return;
   const bounds=$("scan-guide").getBoundingClientRect(),{img}=activeShot();
-  moveFrame(drag.frameX+(e.clientX-drag.x)*img.width/bounds.width,drag.frameY+(e.clientY-drag.y)*img.height/bounds.height);
+  const offsetX=Math.round((e.clientX-drag.x)*img.width/bounds.width);
+  const offsetY=Math.round((e.clientY-drag.y)*img.height/bounds.height);
+  if(drag.group){
+    const moved=shiftGroup(offsetX-drag.appliedX,offsetY-drag.appliedY);
+    drag.appliedX+=moved.dx;drag.appliedY+=moved.dy;
+  }else moveFrame(drag.frameX+offsetX,drag.frameY+offsetY);
 };
 $("scan-frames").onlostpointercapture=()=>{drag=null};
 for(const button of box.querySelectorAll("[data-move]"))button.onclick=()=>nudge(button.dataset.move);
