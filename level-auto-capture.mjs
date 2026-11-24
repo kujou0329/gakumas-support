@@ -12,7 +12,7 @@ async function sourceId(file) {
   return hashes.get(file);
 }
 export async function captureConfirmedLevels(rows, screenshots, cut) {
-  const corrected=rows.filter(r=>r.levelEdited&&r.levelConfirmed&&Number.isInteger(r.level)&&r.level>=1&&r.level<=60);
+  const corrected=rows.filter(r=>r.levelEdited&&r.confirmed&&Number.isInteger(r.level)&&r.level>=1&&r.level<=60);
   if (!corrected.length) return {added:0,duplicates:0,conflicts:0,attempted:0};
   const existing=new Map((await readLibrary()).samples.map(x=>[x.id,x.level]));
   const additions=[],staged=new Map();
