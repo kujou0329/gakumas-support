@@ -386,24 +386,60 @@ async function createOCR(){
     throw err;
   }
 }
-async function readLevel(worker,tile,{top,right,height,threshold}){
-  const c=canvas(184,110),ctx=c.getContext("2d",{willReadFrequently:true});
-  ctx.fillStyle="#000";
-  ctx.fillRect(0,0,c.width,c.height);
-  ctx.drawImage(tile,0,tile.height*top,tile.width*right,tile.height*height,12,12,160,86);
-  const pixels=ctx.getImageData(0,0,c.width,c.height),d=pixels.data;
-  for(let k=0;k<d.length;k+=4){
-    const luminance=.299*d[k]+.587*d[k+1]+.114*d[k+2];
-    d[k]=d[k+1]=d[k+2]=luminance>=threshold?0:255;
+// The in-game Lv digits are white with a dark outline, over colorful artwork.
+// Crop a larger rectangle than the old OCR path and preserve only pale, nearly
+// neutral pixels to isolate the glyphs without the colored background.
+function levelSample(tile,{left=.015,top=.65,right=.295,bottom=.96,mode="white"}={}){
+  const w=tile.width,h=tile.height;
+  const x0=Math.max(0,Math.floor(w*left)),y0=Math.max(0,Math.floor(h*top));
+  const x1=Math.min(w,Math.ceil(w*right)),y1=Math.min(h,Math.ceil(h*bottom));
+  const scale=4,pad=18;
+  const image=canvas((x1-x0)*scale+pad*2,(y1-y0)*scale+pad*2);
+  const ctx=image.getContext("2d",{willReadFrequently:true});
+  ctx.fillStyle="#fff";ctx.fillRect(0,0,image.width,image.height);
+  ctx.imageSmoothingEnabled=false;
+  ctx.drawImage(tile,x0,y0,x1-x0,y1-y0,pad,pad,(x1-x0)*scale,(y1-y0)*scale);
+  const pixels=ctx.getImageData(0,0,image.width,image.height);
+  const data=pixels.data;
+  for(let i=0;i<data.length;i+=4){
+    const r=data[i],g=data[i+1],b=data[i+2];
+    const max=Math.max(r,g,b),min=Math.min(r,g,b);
+    const white= min>170 && max-min<70;
+    const luminance=.299*r+.587*g+.114*b;
+    const dark=mode==="white"?white:luminance>198;
+    data[i]=data[i+1]=data[i+2]=dark?0:255;data[i+3]=255;
   }
   ctx.putImageData(pixels,0,0);
-  const {data}=await deadline(worker.recognize(c),10000,"辨識等級逾時");
-  const digits=data.text.trim(),level=Number(digits);
-  return /^\d{1,2}$/.test(digits)&&level>=1&&level<=60&&data.confidence>=60?level:null;
+  return image;
+}
+async function readLevel(worker,tile,variant){
+  const sample=levelSample(tile,variant);
+  const {data}=await deadline(worker.recognize(sample),12000,"辨識等級逾時");
+  const raw=String(data.text||"").replace(/\s/g,"").replace(/[Oo]/g,"0").replace(/[Il|]/g,"1");
+  const matched=raw.match(/(?:^|[^0-9])([1-5]?\d|60)(?:$|[^0-9])/);
+  const value=matched?Number(matched[1]):null;
+  return value!==null&&value>=1&&value<=60
+    ?{value,confidence:Number(data.confidence)||0}:null;
 }
 async function guessLevel(worker,tile){
-  const level=await readLevel(worker,tile,{top:.69,right:.21,height:.22,threshold:220});
-  return level??await readLevel(worker,tile,{top:.71,right:.245,height:.25,threshold:175});
+  // First run the high-contrast white-digit mask. Only spend time on
+  // alternative crops when the first answer is missing or unreliable.
+  const variants=[
+    {left:.015,top:.65,right:.295,bottom:.96,mode:"white"},
+    {left:.025,top:.68,right:.285,bottom:.96,mode:"white"},
+    {left:.02,top:.63,right:.30,bottom:.96,mode:"light"}
+  ];
+  const first=await readLevel(worker,tile,variants[0]);
+  if(first&&first.confidence>=77)return first.value;
+  const second=await readLevel(worker,tile,variants[1]);
+  if(first&&second&&first.value===second.value)return first.value;
+  if(second&&second.confidence>=80)return second.value;
+  const third=await readLevel(worker,tile,variants[2]);
+  if(third&&((first&&third.value===first.value)||(second&&third.value===second.value)))
+    return third.value;
+  // A single strong OCR reading is useful, but fail closed for ambiguous crops.
+  const highest=[first,second,third].filter(Boolean).sort((a,b)=>b.confidence-a.confidence)[0];
+  return highest&&highest.confidence>=88?highest.value:null;
 }
 async function scan(){
 if(running)return;
