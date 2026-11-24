@@ -20,3 +20,9 @@
 ## 免安裝預覽
 
 在電腦上[下載 PR 分支 ZIP](https://github.com/kujou0329/gakumas-support/archive/refs/heads/codex/support-card-image-catalog.zip)，解壓縮整個資料夾，再以 Chrome 或 Safari 開啟其中的 `index.html`。本機檔案的收藏儲存取決於瀏覽器，可用收藏 JSON 備份或轉移。在 iPhone 上請使用 Safari 開啟已部署的網站。
+
+## Lv 樣本收集
+
+在 HTTPS 網站開啟「從遊戲截圖讀取」，上傳截圖並確認裁切框後，選擇「Lv 樣本收集模式」和「從目前裁切框取樣」。核對原始與去背預覽後，填入 1～60 的正確等級，再單筆加入或勾選批次加入。
+
+樣本庫按來源截圖分組，可刪除錯誤樣本、匯出備份，或在另一個裝置匯入。匯入會合併樣本，原有標記和分組優先。瀏覽器只儲存數字裁切 PNG、等級和識別碼。可以為整張來源設定訓練或獨立測試，再比較完整等級模板、逐字模板與 Tesseract.js。用於比較的圖片與結果不會寫入收藏。 [實機截圖比較紀錄](tools/level-ocr-results.md)

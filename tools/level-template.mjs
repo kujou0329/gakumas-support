@@ -106,17 +106,8 @@ function findDigits(tile, mask) {
 export function matchLevel(tile, templates, { minimum = .82, margin = .07 } = {}) {
   const candidates = new Map();
   for (const mask of SEGMENTATIONS) {
-    const shapes = findDigits(tile, mask);
-    if (!shapes.length || shapes.length > 2 || shapes[0].left > tile.width * .09) continue;
-    if (shapes.length === 2 && (shapes[1].left < tile.width * .09 ||
-        Math.abs(shapes[0].bottom - shapes[1].bottom) > tile.height * .035)) continue;
-    // A lone left glyph in a two-digit slot can be a clipped tens digit. Require
-    // that the right slot has no digit-sized foreground before accepting one.
-    if (shapes.length === 1) {
-      const { width, height } = tile, x = Math.round(width * .11), y = Math.round(height * .72);
-      const rightShapes = components(tile, { x, y, w: Math.round(width * .105), h: Math.round(height * .19) }, mask);
-      if (rightShapes.some(shape => shape.queue.length >= width * height * .002)) continue;
-    }
+    const shapes = levelShapes(tile, mask);
+    if (!shapes.length) continue;
     const scores = shapes.map(shape => {
       const glyph = normalize(shape);
       return new Map(Array.from(templates, ([digit, library]) =>
@@ -134,4 +125,63 @@ export function matchLevel(tile, templates, { minimum = .82, margin = .07 } = {}
   const gap = first && second ? first.score - second.score : 0;
   const value = first && first.score >= minimum && gap >= margin ? first.value : null;
   return { value, best: first?.value ?? null, similarity: first?.score ?? 0, gap };
+}
+
+function levelShapes(tile, mask) {
+  const shapes = findDigits(tile, mask);
+  if (!shapes.length || shapes.length > 2 || shapes[0].left > tile.width * .09) return [];
+  if (shapes.length === 2 && (shapes[1].left < tile.width * .09 ||
+      Math.abs(shapes[0].bottom - shapes[1].bottom) > tile.height * .035)) return [];
+  if (shapes.length === 1) {
+    const { width, height } = tile, x = Math.round(width * .11), y = Math.round(height * .72);
+    const right = components(tile, { x, y, w: Math.round(width * .105), h: Math.round(height * .19) }, mask);
+    if (right.some(shape => shape.queue.length >= width * height * .002)) return [];
+  }
+  return shapes;
+}
+
+function wholeGlyph(shapes) {
+  return normalize({
+    left: shapes[0].left, right: shapes[shapes.length - 1].right,
+    top: Math.min(...shapes.map(shape => shape.top)),
+    bottom: Math.max(...shapes.map(shape => shape.bottom)),
+    stride: shapes[0].stride, queue: shapes.flatMap(shape => shape.queue)
+  });
+}
+
+function appendTemplate(bank, label, shape) {
+  if (!bank.has(label)) bank.set(label, []);
+  bank.get(label).push(shape);
+}
+
+export function learnLevels(samples) {
+  const levels = new Map(), digits = new Map();
+  for (const { level, tile } of samples) {
+    const label = String(level);
+    const shapes = SEGMENTATIONS.map(mask => levelShapes(tile, mask))
+      .find(glyphs => glyphs.length === label.length);
+    if (!shapes) continue;
+    appendTemplate(levels, level, wholeGlyph(shapes));
+    shapes.forEach((shape, i) => appendTemplate(digits, Number(label[i]), normalize(shape)));
+  }
+  return { levels, digits };
+}
+
+export function matchWholeLevel(tile, levels) {
+  const candidates = new Map();
+  for (const mask of SEGMENTATIONS) {
+    const shapes = levelShapes(tile, mask);
+    if (!shapes.length) continue;
+    const glyph = wholeGlyph(shapes);
+    for (const [level, references] of levels) {
+      if (String(level).length !== shapes.length) continue;
+      let score = candidates.get(level) || 0;
+      for (const reference of references) score = Math.max(score, similarity(glyph, reference));
+      candidates.set(level, score);
+    }
+  }
+  const [first, second] = Array.from(candidates, ([value, score]) => ({ value, score }))
+    .sort((a, b) => b.score - a.score);
+  const gap = first && second ? first.score - second.score : 0;
+  return first && first.score >= .90 && gap >= .08 ? first.value : null;
 }

@@ -78,6 +78,7 @@ box.innerHTML=[
 '</div><p id="scan-group-hint">預設拖動任一綠框，或按方向鍵，即可讓目前截圖的全部裁切框一起平移；各張截圖獨立調整。</p><div id="scan-preview"><canvas id="scan-guide" aria-label="截圖裁切預覽"></canvas><div id="scan-frames"></div></div></div>',
 '<div class="scan-line">',
 '<button id="scan-start" class="primary" type="button" disabled>辨識已確認的裁切框</button>',
+'<button id="scan-level-library" type="button">Lv 樣本收集模式</button>',
 '<label style="flex-direction:row;align-items:center"><input id="scan-use-ocr" type="checkbox" checked>讀取等級（OCR 首次需載入免費元件）</label>',
 '</div>',
 '<p id="scan-message" role="status"></p>',
@@ -189,7 +190,7 @@ async function onFiles(){
     try{
       const img=await loadImage(url);
       if(version!==uploadVersion)return;
-      loaded.push({file:file.name,img,frames:detectFrames(img)});
+      loaded.push({file:file.name,sourceFile:file,img,frames:detectFrames(img)});
     }catch(err){failed.push(file.name)}
     finally{URL.revokeObjectURL(url)}
     if(version!==uploadVersion)return;
@@ -506,6 +507,23 @@ render();say((items.length?"辨識完成："+items.length+" 個位置，請逐�
 }catch(e){say("辨識失敗："+e.message)}finally{if(worker)try{await worker.terminate()}catch(e){};running=false;for(const control of controls)control.disabled=false;selectFrame(frameIndex)}
 }
 $("scan-start").onclick=scan;
+let toggleLevelLibrary;
+$("scan-level-library").onclick=async()=>{
+  const button=$("scan-level-library");
+  button.disabled=true;
+  try{
+    if(!toggleLevelLibrary){
+      const {mountLevelSamples}=await import("./level-samples.mjs");
+      toggleLevelLibrary=mountLevelSamples(box,{
+        frames:()=>screenshots.map(shot=>({...shot,frames:shot.frames.map(frame=>({...frame}))})),
+        cut,levelSample,createOCR,guessLevel
+      });
+    }
+    await toggleLevelLibrary();
+  }catch(error){say("無法開啟 Lv 樣本庫："+error.message)}
+  finally{button.disabled=false}
+};
+
 
 const zoom=document.createElement("dialog");
 zoom.id="scan-zoom";
