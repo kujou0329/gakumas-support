@@ -85,7 +85,7 @@ box.innerHTML=[
 '</div>',
 '<p id="scan-message" role="status"></p>',
  '<div id="scan-result"></div>',
-'<div id="scan-summary" class="scan-summary" hidden><strong id="scan-count">尚未選取</strong><button id="scan-save" class="primary" type="button">確認匯入</button><label id="scan-auto-label"><input id="scan-auto-level" type="checkbox" checked>同時收集我手動確認／修正的 Lv 樣本（只存在此裝置）</label><p id="scan-import-message" role="status"></p></div>',
+'<div id="scan-summary" class="scan-summary" hidden><strong id="scan-count">尚未選取</strong><button id="scan-save" class="primary" type="button">確認匯入</button><label id="scan-auto-label"><input id="scan-auto-level" type="checkbox" checked>自動收集手動輸入／更正的 Lv 樣本（只存在此裝置）</label><p id="scan-import-message" role="status"></p></div>',
 '<datalist id="scan-names"></datalist>'
 ].join("");
 document.querySelector(".top").after(box);
