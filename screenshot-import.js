@@ -402,6 +402,8 @@ function levelSample(tile,{left=.015,top=.65,right=.295,bottom=.96,mode="white"}
   const pixels=ctx.getImageData(0,0,image.width,image.height);
   const data=pixels.data;
   for(let i=0;i<data.length;i+=4){
+    const pixel=i/4,x=pixel%image.width,y=Math.floor(pixel/image.width);
+    if(x<pad||x>=image.width-pad||y<pad||y>=image.height-pad)continue;
     const r=data[i],g=data[i+1],b=data[i+2];
     const max=Math.max(r,g,b),min=Math.min(r,g,b);
     const white= min>170 && max-min<70;
@@ -421,6 +423,21 @@ async function readLevel(worker,tile,variant){
   return value!==null&&value>=1&&value<=60
     ?{value,confidence:Number(data.confidence)||0}:null;
 }
+async function readOutlinedLevel(worker,tile,{top,right,height,threshold}){
+  const sample=canvas(184,110),ctx=sample.getContext("2d",{willReadFrequently:true});
+  ctx.fillStyle="#000";
+  ctx.fillRect(0,0,sample.width,sample.height);
+  ctx.drawImage(tile,0,tile.height*top,tile.width*right,tile.height*height,12,12,160,86);
+  const pixels=ctx.getImageData(0,0,sample.width,sample.height),data=pixels.data;
+  for(let i=0;i<data.length;i+=4){
+    const luminance=.299*data[i]+.587*data[i+1]+.114*data[i+2];
+    data[i]=data[i+1]=data[i+2]=luminance>=threshold?0:255;
+  }
+  ctx.putImageData(pixels,0,0);
+  const result=await deadline(worker.recognize(sample),12000,"辨識等級逾時");
+  const digits=String(result.data.text||"").trim(),value=Number(digits);
+  return /^\d{1,2}$/.test(digits)&&value>=1&&value<=60&&result.data.confidence>=60?value:null;
+}
 async function guessLevel(worker,tile){
   // First run the high-contrast white-digit mask. Only spend time on
   // alternative crops when the first answer is missing or unreliable.
@@ -439,7 +456,10 @@ async function guessLevel(worker,tile){
     return third.value;
   // A single strong OCR reading is useful, but fail closed for ambiguous crops.
   const highest=[first,second,third].filter(Boolean).sort((a,b)=>b.confidence-a.confidence)[0];
-  return highest&&highest.confidence>=88?highest.value:null;
+  if(highest&&highest.confidence>=88)return highest.value;
+  // The tighter crop excludes the Lv label, card frame and first breakthrough icon.
+  const outlined=await readOutlinedLevel(worker,tile,{top:.69,right:.21,height:.22,threshold:220});
+  return outlined??await readOutlinedLevel(worker,tile,{top:.71,right:.245,height:.25,threshold:175});
 }
 async function scan(){
 if(running)return;
