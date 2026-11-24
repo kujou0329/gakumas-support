@@ -51,6 +51,8 @@ style.textContent=`
 #scan-message,#scan-import-message{color:#bceadb}
 #scan-import-message{flex-basis:100%;margin:0}
 #scan-import-message:empty{display:none}
+#scan-auto-label{font-size:12px;display:flex;align-items:center;gap:6px;line-height:1.45;color:#c9dbdf}
+#scan-auto-label input{width:18px;height:18px;accent-color:#1aa78b}
 #scan-zoom{max-width:min(95vw,920px);width:95vw;padding:14px;background:#192438;color:white;border:1px solid #66758f;border-radius:13px}
 #scan-zoom::backdrop{background:#050b13d9}
 #scan-zoom img{width:100%;height:auto;max-height:62vh;object-fit:contain}
@@ -83,7 +85,7 @@ box.innerHTML=[
 '</div>',
 '<p id="scan-message" role="status"></p>',
  '<div id="scan-result"></div>',
-'<div id="scan-summary" class="scan-summary" hidden><strong id="scan-count">尚未選取</strong><button id="scan-save" class="primary" type="button">確認匯入</button><p id="scan-import-message" role="status"></p></div>',
+'<div id="scan-summary" class="scan-summary" hidden><strong id="scan-count">尚未選取</strong><button id="scan-save" class="primary" type="button">確認匯入</button><label id="scan-auto-label"><input id="scan-auto-level" type="checkbox" checked>同時收集我手動確認／修正的 Lv 樣本（只存在此裝置）</label><p id="scan-import-message" role="status"></p></div>',
 '<datalist id="scan-names"></datalist>'
 ].join("");
 document.querySelector(".top").after(box);
@@ -500,7 +502,7 @@ if(worker)try{
   await failedWorker.terminate().catch(()=>{});
 }
 items.push({file:shot.file,shot:shotIndex+1,row:b.row,col:b.col,frame:index+1,name:top[0]?.name||"",id:top[0]?.id||"",limit:br.value,
-level:lv,levelReason:!useOCR?"OCR 已關閉":ocrIssue?ocrIssue.startsWith("OCR 中途")?"OCR 中途停止":"OCR 無法載入":"OCR 未能可靠辨識",candidates:top,certainty:br.certainty,confirmed:false,thumb:tile.toDataURL("image/jpeg",.85)});
+level:lv,levelEdited:false,captureFrame:{...b},levelReason:!useOCR?"OCR 已關閉":ocrIssue?ocrIssue.startsWith("OCR 中途")?"OCR 中途停止":"OCR 無法載入":"OCR 未能可靠辨識",candidates:top,certainty:br.certainty,confirmed:false,thumb:tile.toDataURL("image/jpeg",.85)});
 say("已辨識 "+items.length+" 個卡片位置…");
 }
 render();say((items.length?"辨識完成："+items.length+" 個位置，請逐張核對後勾選匯入。":"完整裁切框內沒有偵測到卡面，請檢查截圖與裁切位置。")+" "+ocrIssue);
@@ -604,6 +606,7 @@ $("scan-result").onchange=e=>{
   if(field==="level"){
     const n=e.target.valueAsNumber;
     r.level=Number.isInteger(n)&&n>=1&&n<=60?n:null;
+    r.levelEdited=true;
     r.levelReason=e.target.validity.badInput||e.target.value?"等級須為整數 1～60":"等級尚未填寫";
   }
   if(field==="confirmed")r.confirmed=e.target.checked;
@@ -630,7 +633,9 @@ $("scan-result").onclick=e=>{
     name.dispatchEvent(new Event("change",{bubbles:true}));
   }
 };
-function saveSelections(){
+let savingSelections=false;
+async function saveSelections(){
+  if(savingSelections)return;
   const chosen=items.filter(r=>r.confirmed);
   if(!chosen.length){importStatus("請先核對卡片圖片和數值，並勾選想匯入的卡片。");$("scan-summary").scrollIntoView({behavior:"smooth",block:"center"});return}
   const firstInvalid=chosen.find(r=>issue(r));
@@ -645,14 +650,43 @@ function saveSelections(){
   for(const r of chosen){if(seen.has(r.id))duplicates.push(r.name);seen.add(r.id)}
   if(duplicates.length){importStatus("同張卡在多張截圖中重複勾選，請只保留一筆："+duplicates.join("、"));return}
   const changed=chosen.filter(r=>own[r.id]?.status==="owned"&&(own[r.id]?.limit!==r.limit||own[r.id]?.level!==r.level));
-  if(!confirm("將匯入 "+chosen.length+" 張卡，其中 "+changed.length+" 張會更新先前的突破或等級。確定？"))return;
-  const next={...own};
-  for(const r of chosen)next[r.id]={...own[r.id],status:"owned",limit:r.limit,level:r.level};
-  if(!persist(next)){importStatus("儲存失敗，收藏沒有被修改。請先匯出 JSON 備份。");return}
-  own=next;draw();
-  const message="已儲存 "+chosen.length+" 張！可以匯出 JSON 備份。";
-  say(message);importStatus(message);
-  items=items.filter(r=>!r.confirmed);render();
+  const saveLevelSamples=$("scan-auto-level").checked;
+  const corrected=chosen.filter(r=>r.levelEdited).length;
+  let message="將匯入 "+chosen.length+" 張卡，其中 "+changed.length+" 張會更新先前的突破或等級。";
+  if(saveLevelSamples&&corrected)message+="另外會將 "+corrected+" 張手動核對／修正的 Lv 數字裁切圖存到此裝置樣本庫。";
+  if(!confirm(message+" 確定？"))return;
+  savingSelections=true;
+  $("scan-save").disabled=true;
+  $("scan-result").style.pointerEvents="none";
+  try{
+    // Inventory is committed first; a sample storage error must never roll it back.
+    const next={...own};
+    for(const r of chosen)next[r.id]={...own[r.id],status:"owned",limit:r.limit,level:r.level};
+    if(!persist(next)){importStatus("收藏儲存失敗，沒有匯入，也沒有建立 Lv 樣本。");return}
+    own=next;draw();
+    let report="已匯入 "+chosen.length+" 張收藏。";
+    if(saveLevelSamples&&corrected){
+      try{
+        const {captureConfirmedLevels}=await import("./level-auto-capture.mjs");
+        const result=await captureConfirmedLevels(chosen,screenshots,cut);
+        report+=" 已新增 "+result.added+" 筆 Lv 樣本";
+        if(result.duplicates)report+="、略過 "+result.duplicates+" 筆重複";
+        if(result.conflicts)report+="；有 "+result.conflicts+" 筆與既存標記衝突，未覆寫";
+        report+="。";
+      }catch(error){
+        console.warn("Lv 樣本儲存失敗（收藏已成功匯入）",error);
+        report+=" Lv 樣本存檔失敗（不影響收藏）："+(error?.message||String(error))+"。";
+      }
+    }else if(saveLevelSamples)report+=" 本次未手動修改等級，因此沒有新增樣本。";
+    else report+=" 本次已關閉 Lv 樣本自動收集。";
+    report+=" 建議匯出收藏 JSON 備份；Lv 樣本需另外在樣本庫中匯出。";
+    items=items.filter(r=>!r.confirmed);render();
+    say(report);importStatus(report);
+  }finally{
+    savingSelections=false;
+    $("scan-save").disabled=false;
+    $("scan-result").style.pointerEvents="";
+  }
 }
 $("scan-save").onclick=saveSelections;
 })();
