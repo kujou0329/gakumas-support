@@ -20,7 +20,7 @@ style.textContent=`
 #scan-frames button:focus-visible{outline:2px solid #fff;outline-offset:2px}
 #scan-adjust label{max-width:100%}
 #scan-shot{max-width:100%}
-#scan-adjust button{padding:6px 9px}
+#scan-adjust button{padding:6px 9px}#scan-adjust-mode{min-width:155px}#scan-group-hint{font-size:12px;color:#bceadb;line-height:1.5;margin:0 0 5px}
 #scan-result{display:grid;gap:7px}
 .scan-card{display:grid;grid-template-columns:188px minmax(0,1fr);gap:7px 10px;padding:8px;border:1px solid #46516a;background:#273349;border-radius:10px}
 .scan-card header{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:12px}
@@ -51,6 +51,8 @@ style.textContent=`
 #scan-message,#scan-import-message{color:#bceadb}
 #scan-import-message{flex-basis:100%;margin:0}
 #scan-import-message:empty{display:none}
+#scan-auto-label{font-size:12px;display:flex;align-items:center;gap:6px;line-height:1.45;color:#c9dbdf}
+#scan-auto-label input{width:18px;height:18px;accent-color:#1aa78b}
 #scan-zoom{max-width:min(95vw,920px);width:95vw;padding:14px;background:#192438;color:white;border:1px solid #66758f;border-radius:13px}
 #scan-zoom::backdrop{background:#050b13d9}
 #scan-zoom img{width:100%;height:auto;max-height:62vh;object-fit:contain}
@@ -72,16 +74,18 @@ box.innerHTML=[
  '<div id="scan-preview-controls" hidden><div class="scan-line" id="scan-adjust">',
 '<label>預覽截圖<select id="scan-shot"></select></label>',
 '<label>微調步長<select id="scan-step"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>',
+'<label>調整方式<select id="scan-adjust-mode"><option value="group" selected>整組平移（推薦）</option><option value="single">單張微調</option></select></label>',
 '<button type="button" id="scan-add">新增裁切框</button><button type="button" id="scan-remove">移除選取框</button>',
 '<button type="button" data-move="ArrowLeft" aria-label="裁切框左移">←</button><button type="button" data-move="ArrowUp" aria-label="裁切框上移">↑</button><button type="button" data-move="ArrowDown" aria-label="裁切框下移">↓</button><button type="button" data-move="ArrowRight" aria-label="裁切框右移">→</button>',
-'</div><div id="scan-preview"><canvas id="scan-guide" aria-label="截圖裁切預覽"></canvas><div id="scan-frames"></div></div></div>',
+'</div><p id="scan-group-hint">預設拖動任一綠框，或按方向鍵，即可讓目前截圖的全部裁切框一起平移；各張截圖獨立調整。</p><div id="scan-preview"><canvas id="scan-guide" aria-label="截圖裁切預覽"></canvas><div id="scan-frames"></div></div></div>',
 '<div class="scan-line">',
 '<button id="scan-start" class="primary" type="button" disabled>辨識已確認的裁切框</button>',
+'<button id="scan-level-library" type="button">Lv 樣本收集模式</button>',
 '<label style="flex-direction:row;align-items:center"><input id="scan-use-ocr" type="checkbox" checked>讀取等級（OCR 首次需載入免費元件）</label>',
 '</div>',
 '<p id="scan-message" role="status"></p>',
  '<div id="scan-result"></div>',
-'<div id="scan-summary" class="scan-summary" hidden><strong id="scan-count">尚未選取</strong><button id="scan-save" class="primary" type="button">確認匯入</button><p id="scan-import-message" role="status"></p></div>',
+'<div id="scan-summary" class="scan-summary" hidden><strong id="scan-count">尚未選取</strong><button id="scan-save" class="primary" type="button">確認匯入</button><label id="scan-auto-label"><input id="scan-auto-level" type="checkbox" checked>自動收集手動輸入／更正的 Lv 樣本（只存在此裝置）</label><p id="scan-import-message" role="status"></p></div>',
 '<datalist id="scan-names"></datalist>'
 ].join("");
 document.querySelector(".top").after(box);
@@ -175,6 +179,7 @@ let shotIndex=0,frameIndex=-1,drag=null;
 const moves={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
 function activeShot(){return screenshots[shotIndex]}
 function selectedFrame(){return activeShot()?.frames[frameIndex]}
+function groupMode(){return $("scan-adjust-mode").value==="group"}
 async function onFiles(){
   const version=++uploadVersion;
   screenshots=[];items=[];importStatus("");render();
@@ -187,7 +192,7 @@ async function onFiles(){
     try{
       const img=await loadImage(url);
       if(version!==uploadVersion)return;
-      loaded.push({file:file.name,img,frames:detectFrames(img)});
+      loaded.push({file:file.name,sourceFile:file,img,frames:detectFrames(img)});
     }catch(err){failed.push(file.name)}
     finally{URL.revokeObjectURL(url)}
     if(version!==uploadVersion)return;
@@ -216,7 +221,8 @@ function selectFrame(index){
   frameIndex=index;
   for(const button of $("scan-frames").children)button.setAttribute("aria-pressed",String(Number(button.dataset.frame)===index));
   $("scan-remove").disabled=index<0;
-  for(const button of box.querySelectorAll("[data-move]"))button.disabled=index<0;
+  const hasFrames=Boolean(activeShot()?.frames.length);
+  for(const button of box.querySelectorAll("[data-move]"))button.disabled=running||!hasFrames||(!groupMode()&&index<0);
 }
 function renderFrames(){
   const frames=activeShot().frames;
@@ -230,7 +236,7 @@ function renderFrames(){
   }));
   selectFrame(frameIndex);
   $("scan-start").disabled=!screenshots.some(shot=>shot.frames.length);
-  say(frames.length?"此截圖有 "+frames.length+" 個裁切框。可拖曳或用方向鍵微調，遮擋的卡片請移除。":"此截圖找不到完整卡框，可新增裁切框後拖曳至完整卡片。");
+  say(frames.length?"此截圖有 "+frames.length+" 個裁切框。"+(groupMode()?"拖曳任一框或用方向鍵，就能整組平移。":"目前是單張微調模式。")+" 遮擋的卡片可移除。":"此截圖找不到完整卡框，可新增裁切框後拖曳至完整卡片。");
 }
 function moveFrame(x,y){
   const frame=selectedFrame();
@@ -240,12 +246,26 @@ function moveFrame(x,y){
   frame.y=Math.round(Math.max(0,Math.min(img.height-frame.h,y)));
   syncFrame($("scan-frames").children[frameIndex],frame);
 }
-function nudge(key){
-  const frame=selectedFrame();
-  if(!frame)return;
-  const [dx,dy]=moves[key],step=Number($("scan-step").value);
-  moveFrame(frame.x+dx*step,frame.y+dy*step);
+function shiftGroup(dx,dy){
+  const shot=activeShot();
+  if(!shot?.frames.length||running)return {dx:0,dy:0};
+  const frames=shot.frames;
+  const minX=Math.max(...frames.map(f=>-f.x));
+  const maxX=Math.min(...frames.map(f=>shot.img.width-f.w-f.x));
+  const minY=Math.max(...frames.map(f=>-f.y));
+  const maxY=Math.min(...frames.map(f=>shot.img.height-f.h-f.y));
+  dx=Math.round(Math.max(minX,Math.min(maxX,dx)));
+  dy=Math.round(Math.max(minY,Math.min(maxY,dy)));
+  frames.forEach((f,i)=>{f.x+=dx;f.y+=dy;syncFrame($("scan-frames").children[i],f)});
+  return {dx,dy};
 }
+function nudge(key){
+  if(!moves[key])return;
+  const [dx,dy]=moves[key],step=Number($("scan-step").value);
+  if(groupMode()){shiftGroup(dx*step,dy*step);return}
+  const frame=selectedFrame();if(frame)moveFrame(frame.x+dx*step,frame.y+dy*step);
+}
+$("scan-adjust-mode").onchange=()=>renderFrames();
 $("scan-shot").onchange=e=>{shotIndex=Number(e.target.value);frameIndex=-1;drag=null;drawGuide()};
 $("scan-frames").onclick=e=>{const button=e.target.closest("[data-frame]");if(button&&!running)selectFrame(Number(button.dataset.frame))};
 $("scan-frames").onkeydown=e=>{
@@ -257,13 +277,18 @@ $("scan-frames").onpointerdown=e=>{
   if(!button||running||e.button!==0)return;
   selectFrame(Number(button.dataset.frame));
   const frame=selectedFrame();
-  drag={id:e.pointerId,x:e.clientX,y:e.clientY,frameX:frame.x,frameY:frame.y};
+  drag={id:e.pointerId,x:e.clientX,y:e.clientY,frameX:frame.x,frameY:frame.y,group:groupMode(),appliedX:0,appliedY:0};
   button.setPointerCapture(e.pointerId);
 };
 $("scan-frames").onpointermove=e=>{
   if(!drag||drag.id!==e.pointerId)return;
   const bounds=$("scan-guide").getBoundingClientRect(),{img}=activeShot();
-  moveFrame(drag.frameX+(e.clientX-drag.x)*img.width/bounds.width,drag.frameY+(e.clientY-drag.y)*img.height/bounds.height);
+  const offsetX=Math.round((e.clientX-drag.x)*img.width/bounds.width);
+  const offsetY=Math.round((e.clientY-drag.y)*img.height/bounds.height);
+  if(drag.group){
+    const moved=shiftGroup(offsetX-drag.appliedX,offsetY-drag.appliedY);
+    drag.appliedX+=moved.dx;drag.appliedY+=moved.dy;
+  }else moveFrame(drag.frameX+offsetX,drag.frameY+offsetY);
 };
 $("scan-frames").onlostpointercapture=()=>{drag=null};
 for(const button of box.querySelectorAll("[data-move]"))button.onclick=()=>nudge(button.dataset.move);
@@ -364,24 +389,80 @@ async function createOCR(){
     throw err;
   }
 }
-async function readLevel(worker,tile,{top,right,height,threshold}){
-  const c=canvas(184,110),ctx=c.getContext("2d",{willReadFrequently:true});
-  ctx.fillStyle="#000";
-  ctx.fillRect(0,0,c.width,c.height);
-  ctx.drawImage(tile,0,tile.height*top,tile.width*right,tile.height*height,12,12,160,86);
-  const pixels=ctx.getImageData(0,0,c.width,c.height),d=pixels.data;
-  for(let k=0;k<d.length;k+=4){
-    const luminance=.299*d[k]+.587*d[k+1]+.114*d[k+2];
-    d[k]=d[k+1]=d[k+2]=luminance>=threshold?0:255;
+// The in-game Lv digits are white with a dark outline, over colorful artwork.
+// Crop a larger rectangle than the old OCR path and preserve only pale, nearly
+// neutral pixels to isolate the glyphs without the colored background.
+function levelSample(tile,{left=.015,top=.65,right=.295,bottom=.96,mode="white"}={}){
+  const w=tile.width,h=tile.height;
+  const x0=Math.max(0,Math.floor(w*left)),y0=Math.max(0,Math.floor(h*top));
+  const x1=Math.min(w,Math.ceil(w*right)),y1=Math.min(h,Math.ceil(h*bottom));
+  const scale=4,pad=18;
+  const image=canvas((x1-x0)*scale+pad*2,(y1-y0)*scale+pad*2);
+  const ctx=image.getContext("2d",{willReadFrequently:true});
+  ctx.fillStyle="#fff";ctx.fillRect(0,0,image.width,image.height);
+  ctx.imageSmoothingEnabled=false;
+  ctx.drawImage(tile,x0,y0,x1-x0,y1-y0,pad,pad,(x1-x0)*scale,(y1-y0)*scale);
+  const pixels=ctx.getImageData(0,0,image.width,image.height);
+  const data=pixels.data;
+  for(let i=0;i<data.length;i+=4){
+    const pixel=i/4,x=pixel%image.width,y=Math.floor(pixel/image.width);
+    if(x<pad||x>=image.width-pad||y<pad||y>=image.height-pad)continue;
+    const r=data[i],g=data[i+1],b=data[i+2];
+    const max=Math.max(r,g,b),min=Math.min(r,g,b);
+    const white= min>170 && max-min<70;
+    const luminance=.299*r+.587*g+.114*b;
+    const dark=mode==="white"?white:luminance>198;
+    data[i]=data[i+1]=data[i+2]=dark?0:255;data[i+3]=255;
   }
   ctx.putImageData(pixels,0,0);
-  const {data}=await deadline(worker.recognize(c),10000,"辨識等級逾時");
-  const digits=data.text.trim(),level=Number(digits);
-  return /^\d{1,2}$/.test(digits)&&level>=1&&level<=60&&data.confidence>=60?level:null;
+  return image;
+}
+async function readLevel(worker,tile,variant){
+  const sample=levelSample(tile,variant);
+  const {data}=await deadline(worker.recognize(sample),12000,"辨識等級逾時");
+  const raw=String(data.text||"").replace(/\s/g,"").replace(/[Oo]/g,"0").replace(/[Il|]/g,"1");
+  const matched=raw.match(/(?:^|[^0-9])([1-5]?\d|60)(?:$|[^0-9])/);
+  const value=matched?Number(matched[1]):null;
+  return value!==null&&value>=1&&value<=60
+    ?{value,confidence:Number(data.confidence)||0}:null;
+}
+async function readOutlinedLevel(worker,tile,{top,right,height,threshold}){
+  const sample=canvas(184,110),ctx=sample.getContext("2d",{willReadFrequently:true});
+  ctx.fillStyle="#000";
+  ctx.fillRect(0,0,sample.width,sample.height);
+  ctx.drawImage(tile,0,tile.height*top,tile.width*right,tile.height*height,12,12,160,86);
+  const pixels=ctx.getImageData(0,0,sample.width,sample.height),data=pixels.data;
+  for(let i=0;i<data.length;i+=4){
+    const luminance=.299*data[i]+.587*data[i+1]+.114*data[i+2];
+    data[i]=data[i+1]=data[i+2]=luminance>=threshold?0:255;
+  }
+  ctx.putImageData(pixels,0,0);
+  const result=await deadline(worker.recognize(sample),12000,"辨識等級逾時");
+  const digits=String(result.data.text||"").trim(),value=Number(digits);
+  return /^\d{1,2}$/.test(digits)&&value>=1&&value<=60&&result.data.confidence>=60?value:null;
 }
 async function guessLevel(worker,tile){
-  const level=await readLevel(worker,tile,{top:.69,right:.21,height:.22,threshold:220});
-  return level??await readLevel(worker,tile,{top:.71,right:.245,height:.25,threshold:175});
+  // First run the high-contrast white-digit mask. Only spend time on
+  // alternative crops when the first answer is missing or unreliable.
+  const variants=[
+    {left:.015,top:.65,right:.295,bottom:.96,mode:"white"},
+    {left:.025,top:.68,right:.285,bottom:.96,mode:"white"},
+    {left:.02,top:.63,right:.30,bottom:.96,mode:"light"}
+  ];
+  const first=await readLevel(worker,tile,variants[0]);
+  if(first&&first.confidence>=77)return first.value;
+  const second=await readLevel(worker,tile,variants[1]);
+  if(first&&second&&first.value===second.value)return first.value;
+  if(second&&second.confidence>=80)return second.value;
+  const third=await readLevel(worker,tile,variants[2]);
+  if(third&&((first&&third.value===first.value)||(second&&third.value===second.value)))
+    return third.value;
+  // A single strong OCR reading is useful, but fail closed for ambiguous crops.
+  const highest=[first,second,third].filter(Boolean).sort((a,b)=>b.confidence-a.confidence)[0];
+  if(highest&&highest.confidence>=88)return highest.value;
+  // The tighter crop excludes the Lv label, card frame and first breakthrough icon.
+  const outlined=await readOutlinedLevel(worker,tile,{top:.69,right:.21,height:.22,threshold:220});
+  return outlined??await readOutlinedLevel(worker,tile,{top:.71,right:.245,height:.25,threshold:175});
 }
 async function scan(){
 if(running)return;
@@ -421,13 +502,30 @@ if(worker)try{
   await failedWorker.terminate().catch(()=>{});
 }
 items.push({file:shot.file,shot:shotIndex+1,row:b.row,col:b.col,frame:index+1,name:top[0]?.name||"",id:top[0]?.id||"",limit:br.value,
-level:lv,levelReason:!useOCR?"OCR 已關閉":ocrIssue?ocrIssue.startsWith("OCR 中途")?"OCR 中途停止":"OCR 無法載入":"OCR 未能可靠辨識",candidates:top,certainty:br.certainty,confirmed:false,thumb:tile.toDataURL("image/jpeg",.85)});
+level:lv,levelEdited:false,captureFrame:{...b},levelReason:!useOCR?"OCR 已關閉":ocrIssue?ocrIssue.startsWith("OCR 中途")?"OCR 中途停止":"OCR 無法載入":"OCR 未能可靠辨識",candidates:top,certainty:br.certainty,confirmed:false,thumb:tile.toDataURL("image/jpeg",.85)});
 say("已辨識 "+items.length+" 個卡片位置…");
 }
 render();say((items.length?"辨識完成："+items.length+" 個位置，請逐張核對後勾選匯入。":"完整裁切框內沒有偵測到卡面，請檢查截圖與裁切位置。")+" "+ocrIssue);
 }catch(e){say("辨識失敗："+e.message)}finally{if(worker)try{await worker.terminate()}catch(e){};running=false;for(const control of controls)control.disabled=false;selectFrame(frameIndex)}
 }
 $("scan-start").onclick=scan;
+let toggleLevelLibrary;
+$("scan-level-library").onclick=async()=>{
+  const button=$("scan-level-library");
+  button.disabled=true;
+  try{
+    if(!toggleLevelLibrary){
+      const {mountLevelSamples}=await import("./level-samples.mjs");
+      toggleLevelLibrary=mountLevelSamples(box,{
+        frames:()=>screenshots.map(shot=>({...shot,frames:shot.frames.map(frame=>({...frame}))})),
+        cut,levelSample,createOCR,guessLevel
+      });
+    }
+    await toggleLevelLibrary();
+  }catch(error){say("無法開啟 Lv 樣本庫："+error.message)}
+  finally{button.disabled=false}
+};
+
 
 const zoom=document.createElement("dialog");
 zoom.id="scan-zoom";
@@ -508,6 +606,7 @@ $("scan-result").onchange=e=>{
   if(field==="level"){
     const n=e.target.valueAsNumber;
     r.level=Number.isInteger(n)&&n>=1&&n<=60?n:null;
+    r.levelEdited=true;
     r.levelReason=e.target.validity.badInput||e.target.value?"等級須為整數 1～60":"等級尚未填寫";
   }
   if(field==="confirmed")r.confirmed=e.target.checked;
@@ -534,7 +633,9 @@ $("scan-result").onclick=e=>{
     name.dispatchEvent(new Event("change",{bubbles:true}));
   }
 };
-function saveSelections(){
+let savingSelections=false;
+async function saveSelections(){
+  if(savingSelections)return;
   const chosen=items.filter(r=>r.confirmed);
   if(!chosen.length){importStatus("請先核對卡片圖片和數值，並勾選想匯入的卡片。");$("scan-summary").scrollIntoView({behavior:"smooth",block:"center"});return}
   const firstInvalid=chosen.find(r=>issue(r));
@@ -549,14 +650,43 @@ function saveSelections(){
   for(const r of chosen){if(seen.has(r.id))duplicates.push(r.name);seen.add(r.id)}
   if(duplicates.length){importStatus("同張卡在多張截圖中重複勾選，請只保留一筆："+duplicates.join("、"));return}
   const changed=chosen.filter(r=>own[r.id]?.status==="owned"&&(own[r.id]?.limit!==r.limit||own[r.id]?.level!==r.level));
-  if(!confirm("將匯入 "+chosen.length+" 張卡，其中 "+changed.length+" 張會更新先前的突破或等級。確定？"))return;
-  const next={...own};
-  for(const r of chosen)next[r.id]={...own[r.id],status:"owned",limit:r.limit,level:r.level};
-  if(!persist(next)){importStatus("儲存失敗，收藏沒有被修改。請先匯出 JSON 備份。");return}
-  own=next;draw();
-  const message="已儲存 "+chosen.length+" 張！可以匯出 JSON 備份。";
-  say(message);importStatus(message);
-  items=items.filter(r=>!r.confirmed);render();
+  const saveLevelSamples=$("scan-auto-level").checked;
+  const corrected=chosen.filter(r=>r.levelEdited).length;
+  let message="將匯入 "+chosen.length+" 張卡，其中 "+changed.length+" 張會更新先前的突破或等級。";
+  if(saveLevelSamples&&corrected)message+="另外會將 "+corrected+" 張手動核對／修正的 Lv 數字裁切圖存到此裝置樣本庫。";
+  if(!confirm(message+" 確定？"))return;
+  savingSelections=true;
+  $("scan-save").disabled=true;
+  $("scan-result").style.pointerEvents="none";
+  try{
+    // Inventory is committed first; a sample storage error must never roll it back.
+    const next={...own};
+    for(const r of chosen)next[r.id]={...own[r.id],status:"owned",limit:r.limit,level:r.level};
+    if(!persist(next)){importStatus("收藏儲存失敗，沒有匯入，也沒有建立 Lv 樣本。");return}
+    own=next;draw();
+    let report="已匯入 "+chosen.length+" 張收藏。";
+    if(saveLevelSamples&&corrected){
+      try{
+        const {captureConfirmedLevels}=await import("./level-auto-capture.mjs");
+        const result=await captureConfirmedLevels(chosen,screenshots,cut);
+        report+=" 已新增 "+result.added+" 筆 Lv 樣本";
+        if(result.duplicates)report+="、略過 "+result.duplicates+" 筆重複";
+        if(result.conflicts)report+="；有 "+result.conflicts+" 筆與既存標記衝突，未覆寫";
+        report+="。";
+      }catch(error){
+        console.warn("Lv 樣本儲存失敗（收藏已成功匯入）",error);
+        report+=" Lv 樣本存檔失敗（不影響收藏）："+(error?.message||String(error))+"。";
+      }
+    }else if(saveLevelSamples)report+=" 本次未手動修改等級，因此沒有新增樣本。";
+    else report+=" 本次已關閉 Lv 樣本自動收集。";
+    report+=" 建議匯出收藏 JSON 備份；Lv 樣本需另外在樣本庫中匯出。";
+    items=items.filter(r=>!r.confirmed);render();
+    say(report);importStatus(report);
+  }finally{
+    savingSelections=false;
+    $("scan-save").disabled=false;
+    $("scan-result").style.pointerEvents="";
+  }
 }
 $("scan-save").onclick=saveSelections;
 })();
